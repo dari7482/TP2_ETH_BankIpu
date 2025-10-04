@@ -1,5 +1,4 @@
-0xd50E58F2e1358AF3c806b0E5E778c77829645f2A: contrato 
-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
+
 //SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
