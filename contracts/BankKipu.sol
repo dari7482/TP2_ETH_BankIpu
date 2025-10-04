@@ -1,4 +1,3 @@
-
 //SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
@@ -33,7 +32,12 @@ contract KipuBank{
     /*///////////////////////
 						Errors
 	///////////////////////*/
+    error Desposit_amount_error(address user_found,string message);
+    error WithdrawAmountError(address sender, string message);
     error withdraw_TrasactationFail(bytes erro);
+    error Bank_Capacity_error(uint256 _amount,string unit);
+    /// @notice Error triggered when withdrawal exceeds allowed maximum
+    error WithdrawLimitError(uint256 amount, string message);
 
 
     
@@ -43,23 +47,53 @@ contract KipuBank{
         i_bankCapGlobalAllowed=_bankCapGlobalAllowed; 
         
     }
+
+
     /*///////////////////////
 					Functions
 	///////////////////////*/
     receive() external payable{}
 	fallback() external{}
 
+    /// @notice Prevents deposits of zero wei
+    modifier ControlZeroAmout(){
+         if (msg.value == 0) revert Desposit_amount_error(msg.sender,"Deposit amount must be greater than zero."); 
+         _;        
+    }
+    /// @notice Validates that withdrawal amount is greater than zero
+    modifier validWithdrawAmount(uint256 _amount) {
+    if (_amount == 0) revert WithdrawAmountError(msg.sender, "Withdrawal amount must be greater than zero.");
+    _;
+    }
+    /// @notice Ensures that the total amount does not exceed the global bank cap
+    modifier ControlGlobalBankLimit(){
+        if (s_totalFounds+msg.value > i_bankCapGlobalAllowed) revert Bank_Capacity_error(msg.value,"Global deposit limit exceeded!!");      
+         _;        
+    }
+    /// @notice Validates that withdrawal does not exceed the allowed maximum
+    modifier withinWithdrawLimit(uint256 _amount) {
+    if (_amount > i_MaxWithdraw) 
+        revert WithdrawLimitError(_amount, "Withdrawal amount exceeds the allowed maximum limit.");
+    if (s_deposits[msg.sender] < _amount) {
+        revert WithdrawLimitError(_amount, "Insufficient balance to complete the withdrawal.");
+    }
+    
+    _;
+}
+
     /*@notice deposit function
     @param  amount to be saved by the user*/
    
-    function depositAmount() external payable {
-        require(msg.value > 0, "Deposit amount must be greater than zero.");
-        require(s_totalFounds+msg.value <= i_bankCapGlobalAllowed, string(abi.encodePacked("Bank capacity is ",Strings.toString(i_bankCapGlobalAllowed)," wei")));
+    function depositAmount() external payable ControlZeroAmout ControlGlobalBankLimit{      
+        
+        
         s_deposits[msg.sender] += msg.value;
         s_totalFounds+=msg.value;
         s_numDeposit++;
         emit  Deposit_amountSaved(msg.sender,msg.value);
     }
+
+  
     /*
       * @notice Function that allows a user to withdraw funds.
       * @notice The withdrawal amount must be greater than zero and less than the global limit allowed by the bank.
@@ -69,15 +103,10 @@ contract KipuBank{
     
     */
 
-    function withdrawAmount(uint256 _amount) external {       
-        require(_amount > 0, "Withdrawal amount must be greater than zero.");
-        require(_amount < i_MaxWithdraw, string(abi.encodePacked("Withdrawal amount must be less than ",Strings.toString(i_MaxWithdraw)," wei")));
+    function withdrawAmount(uint256 _amount) external validWithdrawAmount(_amount) withinWithdrawLimit(_amount){       
+               
 
-        emit Retire_InProcess(msg.sender, address(this).balance);
-        
-
-
-
+        emit Retire_InProcess(msg.sender, _amount);      
         _transferEth(_amount); 
 
     }
@@ -94,12 +123,13 @@ contract KipuBank{
 
 
     function _transferEth(uint256 _amount) private{
+         s_deposits[msg.sender] -= _amount;
+         s_numRetire++;
+
 
 		(bool sucesso, bytes memory erro) = msg.sender.call{value: _amount}("");
 		if(!sucesso) revert withdraw_TrasactationFail(erro);
-        s_deposits[msg.sender] -= _amount;
-        s_numRetire++;
-
+       
 
     } 
 
@@ -134,9 +164,6 @@ contract KipuBank{
 
 
 }
-
-
-
 
 
 
